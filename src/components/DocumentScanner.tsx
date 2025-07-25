@@ -19,6 +19,7 @@ export default function DocumentScanner() {
   const [showModal, setShowModal] = useState<boolean>(true);
   const [isScanning, setIsScanning] = useState<boolean>(false);
   const [hasMissingParams, setHasMissingParams] = useState(false);
+  const [linkExpired, setLinkExpired] = useState(false);
   const [repeat, setRepeat] = useState(0)
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -52,9 +53,11 @@ export default function DocumentScanner() {
         const result = await response.json();
 
         if (!response.ok) {
-          throw new Error(result?.data?.message || 'Unexpected error');
+          if (result.error === "Link Expired") {
+            router.push("/linkExpiredPage");
+          }
+          throw new Error(result.data.data.message || 'Unexpected error');
         }
-
         if (result.data.data.status === "expired") {
           router.push("/linkExpiredPage");
         }
@@ -72,7 +75,6 @@ export default function DocumentScanner() {
 
     getlinkStatus();
   }, [searchParams, router]);
-
 
 
   if (hasMissingParams) {
