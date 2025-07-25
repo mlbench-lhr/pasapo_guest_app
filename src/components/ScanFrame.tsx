@@ -1,6 +1,4 @@
 import { useRef, useEffect, useState } from 'react';
-import { ScannedData } from './DocumentScanner';
-import Tesseract from 'tesseract.js';
 import { useRouter } from "next/navigation";
 import Image from 'next/image';
 
@@ -8,21 +6,24 @@ interface ScanFrameProps {
     isScanning: boolean;
     repeat: number;
     setIsScanning: (value: boolean) => void;
-    onScanComplete: (data: ScannedData) => void;
+    onScanComplete: () => void;
 }
 
-export default function ScanFrame({ isScanning, setIsScanning }: ScanFrameProps) {
+export default function ScanFrame({ isScanning, repeat, setIsScanning, onScanComplete }: ScanFrameProps) {
     const videoRef = useRef<HTMLVideoElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const [stream, setStream] = useState<MediaStream | null>(null);
     const [hasPermission, setHasPermission] = useState<boolean | null>(null);
     const [isProcessing, setIsProcessing] = useState<boolean>(false);
+    const [currentScanCount, setCurrentScanCount] = useState<number>(0);
+    const [errorMessage, setErrorMessage] = useState<string | null>(null);
     const router = useRouter();
-
 
     useEffect(() => {
         if (isScanning) {
             startCamera();
+            // Reset scan count when starting new scanning session
+            setCurrentScanCount(0);
         } else {
             stopCamera();
         }
@@ -155,18 +156,15 @@ export default function ScanFrame({ isScanning, setIsScanning }: ScanFrameProps)
     };
 
     const processPassportImage = async (imageBlob: Blob): Promise<void> => {
+        const link_id = sessionStorage.getItem("link_id")
         const formData = new FormData();
-        formData.append("api_key", "v53gv2f4vdfhbtymhsdfvweuyv876gv8yfg");
-        formData.append("email", "abdulrafay23butt@gmail.com");
+        formData.append("api_key", "k38djv9gwe8fbvtmh28rfqwev7xg63hjfd");
+        formData.append("link_id", link_id || "");
         formData.append("image", imageBlob, "passport.jpg");
-
 
         try {
             const response = await fetch("/api/process-passport", {
                 method: "POST",
-                headers: {
-                    "Session": "3701495fbd58a98fc670d107eb8ecb0f"
-                },
                 body: formData
             });
 
@@ -175,22 +173,49 @@ export default function ScanFrame({ isScanning, setIsScanning }: ScanFrameProps)
                 console.error("Server Error:", result.data.message);
                 throw new Error(result.data.message)
             }
+            console.log(result.data)
+            // Successful scan - increment count
+            const newScanCount = currentScanCount + 1;
+            setCurrentScanCount(newScanCount);
 
-            setIsProcessing(false)
-            router.push("/checkedin")
+            console.log(`Scan ${newScanCount} of ${repeat} completed`);
+
+            // Check if we've completed all required scans
+            if (newScanCount >= repeat) {
+                // All scans completed
+                setIsProcessing(false);
+                setIsScanning(false);
+
+                // Call onScanComplete
+                onScanComplete();
+
+                router.push("/checkedin");
+            } else {
+                // More scans needed - continue scanning
+                setIsProcessing(false);
+                // Keep camera running for next scan
+                console.log(`Preparing for scan ${newScanCount + 1} of ${repeat}`);
+
+                // Optional: Add a brief delay between scans
+                setTimeout(() => {
+                    // Ready for next scan
+                }, 1000);
+            }
 
         } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
             console.error("Network Error:", message);
-            if (error instanceof Error && error.message === "MRZ not found or invalid") {
-                console.log(error.message)
-                setIsScanning(true)
-                setIsProcessing(false)
-                startCamera()
-            }
-        };
-    }
+            setErrorMessage(message);
 
+            if (error instanceof Error && error.message === "MRZ not found or invalid") {
+                console.log(`Scan ${currentScanCount + 1} failed: ${error.message}`);
+                setIsProcessing(false);
+                // Continue scanning without incrementing count
+                // Camera stays active for retry
+            }
+            setIsProcessing(false);
+        }
+    };
 
     if (hasPermission === false) {
         return (
@@ -224,14 +249,28 @@ export default function ScanFrame({ isScanning, setIsScanning }: ScanFrameProps)
     }
 
     return (
-
         <>
             {/* Main Scanner UI */}
             <div className="flex flex-col items-center">
-                <p className="text-gray-400 text-center mb-8 text-lg leading-relaxed">
+                <p className="text-gray-400 text-center mb-4 text-lg leading-relaxed">
                     Move passport inside the<br />
                     blue square
                 </p>
+
+                {/* Scan Progress Indicator */}
+                {repeat > 1 && (
+                    <div className="mb-4 text-center">
+                        <p className="text-sm text-gray-500">
+                            Scan {currentScanCount + 1} of {repeat}
+                        </p>
+                        <div className="w-48 bg-gray-700 rounded-full h-2 mt-2">
+                            <div
+                                className="bg-blue-500 h-2 rounded-full transition-all duration-300"
+                                style={{ width: `${(currentScanCount / repeat) * 100}%` }}
+                            ></div>
+                        </div>
+                    </div>
+                )}
 
                 <div className="relative">
                     {/* Scan Frame */}
@@ -259,7 +298,7 @@ export default function ScanFrame({ isScanning, setIsScanning }: ScanFrameProps)
                             <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center z-20">
                                 <div className="text-white text-center">
                                     <div className="animate-spin w-8 h-8 border-2 border-white border-t-transparent rounded-full mx-auto mb-2"></div>
-                                    <p>Processing...</p>
+                                    <p>Processing scan {currentScanCount + 1}...</p>
                                 </div>
                             </div>
                         )}
@@ -270,6 +309,13 @@ export default function ScanFrame({ isScanning, setIsScanning }: ScanFrameProps)
                         )}
                     </div>
                 </div>
+                {
+                    errorMessage && (
+                        <div className="mt-4 text-red-500 text-center">
+                            {errorMessage}
+                        </div>
+                    )
+                }
 
                 {/* Hidden canvas for image processing */}
                 <canvas ref={canvasRef} className="hidden" />
@@ -290,7 +336,5 @@ export default function ScanFrame({ isScanning, setIsScanning }: ScanFrameProps)
                 </button>
             )}
         </>
-
-
     );
 }

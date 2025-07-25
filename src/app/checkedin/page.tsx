@@ -3,7 +3,7 @@ import Image from "next/image";
 export default function checkedin() {
     return (
         <div className="min-h-screen flex flex-col items-center justify-center bg-white px-4 text-center">
-            <div className="flex items-center justify-center w-100 h-20 mb-6">
+            <div className="flex items-center justify-center w-75 h-20 mb-6">
                 <Image
                     width={105}
                     height={20}
