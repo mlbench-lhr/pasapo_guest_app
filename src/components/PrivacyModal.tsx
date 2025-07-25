@@ -22,7 +22,7 @@ export default function PrivacyModal({ onAgree }: PrivacyModalProps) {
         {/* Privacy Text */}
         <div className="mb-6 text-gray-700 text-sm leading-relaxed">
           <p className="mb-3">
-            To meet Türkiye's legal guest registration rules, your 
+            To meet Türkiye&#39;s legal guest registration rules, your 
             passport info will be submitted to the police KBS system.
           </p>
           <p className="mb-3">

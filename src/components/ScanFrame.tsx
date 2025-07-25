@@ -78,9 +78,9 @@ export default function ScanFrame({ isScanning, repeat, setIsScanning, onScanCom
                     console.log('Trying camera constraint:', constraint);
                     mediaStream = await navigator.mediaDevices.getUserMedia(constraint);
                     break;
-                } catch (error: any) {
+                } catch (error: unknown) {
                     console.log('Camera constraint failed:', error);
-                    lastError = error;
+                    lastError = error as Error;
                     continue;
                 }
             }
@@ -105,21 +105,25 @@ export default function ScanFrame({ isScanning, repeat, setIsScanning, onScanCom
                     console.log('Video play error (this is often normal):', playError);
                 }
             }
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('Error accessing camera:', error);
             setHasPermission(false);
 
-            // Show specific error messages
-            if (error.name === 'NotAllowedError') {
-                console.log('Camera permission denied by user');
-            } else if (error.name === 'NotFoundError') {
-                console.log('No camera found on device');
-            } else if (error.name === 'NotReadableError') {
-                console.log('Camera is being used by another application');
-            } else if (error.name === 'OverconstrainedError') {
-                console.log('Camera constraints not supported');
+            if (typeof error === 'object' && error !== null && 'name' in error) {
+                const err = error as { name: string };
+
+                if (err.name === 'NotAllowedError') {
+                    console.log('Camera permission denied by user');
+                } else if (err.name === 'NotFoundError') {
+                    console.log('No camera found on device');
+                } else if (err.name === 'NotReadableError') {
+                    console.log('Camera is being used by another application');
+                } else if (err.name === 'OverconstrainedError') {
+                    console.log('Camera constraints not supported');
+                }
             }
         }
+
     };
 
     const stopCamera = (): void => {
@@ -232,7 +236,7 @@ export default function ScanFrame({ isScanning, repeat, setIsScanning, onScanCom
                         <div className="text-left text-xs space-y-2 bg-gray-800 p-3 rounded">
                             <p className="font-medium text-white">How to enable:</p>
                             <p>• Click the camera icon in address bar</p>
-                            <p>• Select "Allow" when prompted</p>
+                            <p>• Select &quot;Allow&quot; when prompted</p>
                             <p>• Refresh the page if needed</p>
                         </div>
 

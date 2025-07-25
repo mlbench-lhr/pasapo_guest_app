@@ -2,7 +2,6 @@
 import { useEffect, useState } from 'react';
 import ScanFrame from './ScanFrame';
 import PrivacyModal from './PrivacyModal';
-import ScanResults from './ScanResults';
 import { useSearchParams } from 'next/navigation';
 import { useRouter } from "next/navigation";
 
