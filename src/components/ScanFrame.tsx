@@ -1,3 +1,4 @@
+'use client'
 import { useRef, useEffect, useState } from 'react';
 import { useRouter } from "next/navigation";
 import Image from 'next/image';
@@ -262,7 +263,7 @@ export default function ScanFrame({ isScanning, repeat, setIsScanning, onScanCom
                 </p>
 
                 {/* Scan Progress Indicator */}
-                {repeat > 1 && (
+                {repeat > 0 && (
                     <div className="mb-4 text-center">
                         <p className="text-sm text-gray-500">
                             Scan {currentScanCount + 1} of {repeat}
