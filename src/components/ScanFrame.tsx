@@ -2,7 +2,8 @@
 import { useRef, useEffect, useState } from 'react';
 import { useRouter } from "next/navigation";
 import Image from 'next/image';
-
+import { io, Socket } from 'socket.io-client';
+import SocketLoadingModal from './modal';
 interface ScanFrameProps {
     isScanning: boolean;
     repeat: number;
@@ -19,6 +20,10 @@ export default function ScanFrame({ isScanning, repeat, setIsScanning, onScanCom
     const [currentScanCount, setCurrentScanCount] = useState<number>(0);
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
     const router = useRouter();
+    const [socket, setSocket] = useState<Socket | null>(null);
+    const [showSocketModal, setShowSocketModal] = useState<boolean>(false);
+    const [socketInfo, setSocketInfo] = useState<string>('');
+    const [socketStatus, setSocketStatus] = useState<string>('');
 
     useEffect(() => {
         if (isScanning) {
@@ -29,7 +34,13 @@ export default function ScanFrame({ isScanning, repeat, setIsScanning, onScanCom
             stopCamera();
         }
 
-        return () => stopCamera();
+        return () => {
+            stopCamera();
+            // Clean up socket connection
+            if (socket) {
+                socket.disconnect();
+            }
+        };
     }, [isScanning]);
 
     const startCamera = async (): Promise<void> => {
@@ -178,7 +189,23 @@ export default function ScanFrame({ isScanning, repeat, setIsScanning, onScanCom
                 console.error("Server Error:", result.data.message);
                 throw new Error(result.data.message)
             }
-            console.log(result.data)
+            console.log(result.data.data.guestInfo)
+
+            // Extract guest ID from response
+            const guestId = result.data.data?.guestInfo?.id;
+
+            if (!guestId) {
+                throw new Error("No guest ID found in response");
+            }
+
+            console.log("Guest ID found:", guestId);
+
+            // Connect to socket and wait for status_on_kbs to be "failed"
+            console.log("Connecting to socket and waiting for status_on_kbs...");
+            const socketData = await connectToSocket(guestId);
+
+            console.log("Socket data received:", socketData);
+
             // Successful scan - increment count
             const newScanCount = currentScanCount + 1;
             setCurrentScanCount(newScanCount);
@@ -220,6 +247,116 @@ export default function ScanFrame({ isScanning, repeat, setIsScanning, onScanCom
             }
             setIsProcessing(false);
         }
+    };
+
+    const connectToSocket = (guestId: string): Promise<{ kbs_socket_info: string, status_on_kbs: string }> => {
+        return new Promise((resolve, reject) => {
+            // Show modal when starting socket connection
+            setShowSocketModal(true);
+            setSocketInfo('');
+            setSocketStatus('connecting');
+
+            const newSocket = io('http://127.0.0.1:9000', {
+                transports: ["websocket"],
+            });
+
+            newSocket.on('connect', () => {
+                console.log('Connected to socket for guest:', guestId);
+                setSocketStatus('connected');
+                newSocket.emit('join_guest', { guest_id: guestId });
+            });
+
+            newSocket.on('guest_data', (data) => {
+                const kbs_socket_info = data.data?.kbs_socket_info || '';
+                const status_on_kbs = data.data?.status_on_kbs || '';
+
+                console.log('Received guest data:', { kbs_socket_info, status_on_kbs });
+
+                // Update modal with socket info
+                setSocketInfo(kbs_socket_info);
+                setSocketStatus(status_on_kbs);
+
+                if (status_on_kbs === 'failed') {
+                    newSocket.disconnect();
+                    // Don't close modal automatically for failed status - let user close it
+                    resolve({ kbs_socket_info, status_on_kbs });
+                } else if (status_on_kbs === 'checkedIn') {
+                    newSocket.disconnect();
+                    setShowSocketModal(false); // Only auto-close for successful check-in
+                    resolve({ kbs_socket_info, status_on_kbs });
+                }
+            });
+
+            newSocket.on('guest_updated', (data) => {
+                const kbs_socket_info = data.data?.kbs_socket_info || '';
+                const status_on_kbs = data.data?.status_on_kbs || '';
+
+                console.log('Guest updated:', { kbs_socket_info, status_on_kbs });
+
+                // Update modal with socket info
+                setSocketInfo(kbs_socket_info);
+                setSocketStatus(status_on_kbs);
+
+                if (status_on_kbs === 'failed') {
+                    newSocket.disconnect();
+                    // Don't close modal automatically for failed status - let user close it
+                    resolve({ kbs_socket_info, status_on_kbs });
+                } else if (status_on_kbs === 'checkedIn') {
+                    newSocket.disconnect();
+                    setShowSocketModal(false); // Only auto-close for successful check-in
+                    resolve({ kbs_socket_info, status_on_kbs });
+                }
+            });
+
+            newSocket.on('error', (error) => {
+                console.error('Socket error:', error);
+                newSocket.disconnect();
+                setShowSocketModal(false); // Hide modal on error
+                reject(new Error('Socket connection error'));
+            });
+
+            newSocket.on('disconnect', () => {
+                console.log('Socket disconnected');
+                // setShowSocketModal(false); // Hide modal on disconnect
+            });
+
+            setSocket(newSocket);
+        });
+    };
+
+    const testWithImageFile = (): void => {
+        const input: HTMLInputElement = document.createElement('input');
+        input.type = 'file';
+        input.accept = 'image/*';
+
+        input.onchange = async (e: Event): Promise<void> => {
+            const target = e.target as HTMLInputElement;
+            const file: File | null = target.files?.[0] || null;
+
+            if (file) {
+                console.log('Testing with file:', file.name, file.size, 'bytes');
+
+                // Set some test values
+                setCurrentScanCount(0); // Reset for testing
+
+                try {
+                    await processPassportImage(file as Blob); // file is already a Blob
+                    console.log('Test completed successfully!');
+                } catch (error: unknown) {
+                    const errorMessage = error instanceof Error ? error.message : String(error);
+                    console.error('Test failed:', errorMessage);
+                }
+            }
+        };
+
+        input.click();
+    };
+
+    const onCloseModal = () => {
+        setShowSocketModal(false);
+        // Reset socket info when closing modal
+        setSocketInfo('');
+        setSocketStatus('');
     };
 
     if (hasPermission === false) {
@@ -328,18 +465,34 @@ export default function ScanFrame({ isScanning, repeat, setIsScanning, onScanCom
 
             {/* Fixed Bottom Capture Button */}
             {isScanning && !isProcessing && (
-                <button
-                    onClick={captureImage}
-                    className="fixed bottom-8 left-1/2 transform -translate-x-1/2 bg-blue-500 hover:bg-blue-600 text-white p-3 rounded-full font-medium transition-colors z-50"
-                >
-                    <Image
-                        width={63}
-                        height={20}
-                        src="/images/camera.svg"
-                        alt="Logo"
-                    />
-                </button>
+                <>
+                    <button
+                        onClick={captureImage}
+                        className="fixed bottom-8 left-1/2 transform -translate-x-1/2 bg-blue-500 hover:bg-blue-600 text-white p-3 rounded-full font-medium transition-colors z-50"
+                    >
+                        <Image
+                            width={63}
+                            height={20}
+                            src="/images/camera.svg"
+                            alt="Logo"
+                        />
+                    </button>
+                    <button
+                        onClick={testWithImageFile}
+                        className="fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded z-50"
+                        type="button"
+                    >
+                        Test Image Upload
+                    </button>
+                </>
             )}
+            <SocketLoadingModal
+                isOpen={showSocketModal}
+                kbsSocketInfo={socketInfo}
+                status={socketStatus}
+                onClose={onCloseModal}
+            />
+
         </>
     );
 }
