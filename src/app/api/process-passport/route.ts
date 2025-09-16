@@ -13,7 +13,7 @@ export async function POST(req: NextRequest) {
     backendForm.append("image", image, "passport.jpg");
 
     try {
-        const backendRes = await fetch(process.env.NEXT_PUBLIC_LOCAL_URL + "/guest/scan_passport", {
+        const backendRes = await fetch(process.env.NEXT_PUBLIC_LIVE_URL + "/guest/scan_passport", {
             method: "POST",
             body: backendForm
         });

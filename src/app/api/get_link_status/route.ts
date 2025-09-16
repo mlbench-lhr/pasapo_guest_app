@@ -11,7 +11,7 @@ export async function POST(req: NextRequest) {
         );
     }
     try {
-        const backendRes = await fetch(process.env.NEXT_PUBLIC_LOCAL_URL + "/guest/get_link_status", {
+        const backendRes = await fetch(process.env.NEXT_PUBLIC_LIVE_URL + "/guest/get_link_status", {
             method: "POST",
             headers: {
                 "Content-Type": "application/json" 
