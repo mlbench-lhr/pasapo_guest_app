@@ -15,7 +15,7 @@ export default function SocketLoadingModal({ isOpen, kbsSocketInfo, status, onCl
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
             <div className="bg-white rounded-lg p-6 max-w-sm w-full mx-4 text-center">
                 <div className="mb-4">
-                    {!isFailed ? (
+                    {!isFailed && !isPassed ? (
                         <div className="animate-spin w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full mx-auto mb-4"></div>
                     ) : (
                         <div className="w-12 h-12 bg-red-500 rounded-full flex items-center justify-center mx-auto mb-4">

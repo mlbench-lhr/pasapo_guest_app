@@ -25,9 +25,9 @@ export default function ScanFrame({ isScanning, repeat, setIsScanning, onScanCom
     const [socketInfo, setSocketInfo] = useState<string>('');
     const [socketStatus, setSocketStatus] = useState<string>('');
 
-    useEffect(()=>{
+    useEffect(() => {
         console.log("modal", showSocketModal)
-    },[showSocketModal])
+    }, [showSocketModal])
 
     useEffect(() => {
         if (isScanning) {
@@ -211,35 +211,7 @@ export default function ScanFrame({ isScanning, repeat, setIsScanning, onScanCom
             console.log("Socket data received:", socketData);
 
             // Successful scan - increment count
-            const newScanCount = currentScanCount + 1;
-            setCurrentScanCount(newScanCount);
 
-            console.log(`Scan ${newScanCount} of ${repeat} completed`);
-
-            // Check if we've completed all required scans
-            if (newScanCount >= repeat) {
-                // All scans completed
-                setIsProcessing(false);
-                setIsScanning(false);
-
-                // Call onScanComplete
-                onScanComplete();
-                console.log(showSocketModal)
-
-                if (!showSocketModal) {
-                    router.push("/checkedin");
-                }
-            } else {
-                // More scans needed - continue scanning
-                setIsProcessing(false);
-                // Keep camera running for next scan
-                console.log(`Preparing for scan ${newScanCount + 1} of ${repeat}`);
-
-                // Optional: Add a brief delay between scans
-                setTimeout(() => {
-                    // Ready for next scan
-                }, 1000);
-            }
 
         } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
@@ -259,7 +231,7 @@ export default function ScanFrame({ isScanning, repeat, setIsScanning, onScanCom
     const connectToSocket = (guestId: string): Promise<{ kbs_socket_info: string, status_on_kbs: string }> => {
         return new Promise((resolve, reject) => {
             // Show modal when starting socket connection
-            showSocketModal.current=true;
+            showSocketModal.current = true;
             setSocketInfo('');
             setSocketStatus('connecting');
 
@@ -361,10 +333,39 @@ export default function ScanFrame({ isScanning, repeat, setIsScanning, onScanCom
 
     const onCloseModal = () => {
         // setShowSocketModal(false);
-        showSocketModal.current=false
+        showSocketModal.current = false
         // Reset socket info when closing modal
         setSocketInfo('');
         setSocketStatus('');
+        const newScanCount = currentScanCount + 1;
+        console.log(`Scan ${newScanCount} of ${repeat} completed`);
+
+        // Check if we've completed all required scans
+        if (newScanCount >= repeat) {
+            // All scans completed
+            setIsProcessing(false);
+            setIsScanning(false);
+
+            // Call onScanComplete
+            onScanComplete();
+            console.log(showSocketModal)
+
+            if (!showSocketModal.current) {
+                router.push("/checkedin");
+            }
+        } else {
+            // More scans needed - continue scanning
+            setIsProcessing(false);
+            // Keep camera running for next scan
+            console.log(`Preparing for scan ${newScanCount + 1} of ${repeat}`);
+
+            // Optional: Add a brief delay between scans
+            setTimeout(() => {
+                // Ready for next scan
+            }, 1000);
+            setCurrentScanCount(newScanCount);
+
+        }
     };
 
     if (hasPermission === false) {
