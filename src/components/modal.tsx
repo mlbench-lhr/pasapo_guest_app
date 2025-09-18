@@ -9,6 +9,7 @@ export default function SocketLoadingModal({ isOpen, kbsSocketInfo, status, onCl
     if (!isOpen) return null;
 
     const isFailed = status === 'failed';
+    const isPassed = status === 'checkedin';
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -41,7 +42,7 @@ export default function SocketLoadingModal({ isOpen, kbsSocketInfo, status, onCl
                     </div>
                 )}
                
-                {isFailed && (
+                {(isFailed || isPassed) && (
                     <button
                         onClick={onClose}
                         className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-2 rounded-lg font-medium transition-colors"

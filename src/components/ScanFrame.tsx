@@ -1,5 +1,5 @@
 'use client'
-import { useRef, useEffect, useState } from 'react';
+import { useRef, useEffect, useState, use } from 'react';
 import { useRouter } from "next/navigation";
 import Image from 'next/image';
 import { io, Socket } from 'socket.io-client';
@@ -21,9 +21,13 @@ export default function ScanFrame({ isScanning, repeat, setIsScanning, onScanCom
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
     const router = useRouter();
     const [socket, setSocket] = useState<Socket | null>(null);
-    const [showSocketModal, setShowSocketModal] = useState<boolean>(false);
+    const showSocketModal = useRef<boolean>(false);
     const [socketInfo, setSocketInfo] = useState<string>('');
     const [socketStatus, setSocketStatus] = useState<string>('');
+
+    useEffect(()=>{
+        console.log("modal", showSocketModal)
+    },[showSocketModal])
 
     useEffect(() => {
         if (isScanning) {
@@ -220,6 +224,7 @@ export default function ScanFrame({ isScanning, repeat, setIsScanning, onScanCom
 
                 // Call onScanComplete
                 onScanComplete();
+                console.log(showSocketModal)
 
                 if (!showSocketModal) {
                     router.push("/checkedin");
@@ -254,7 +259,7 @@ export default function ScanFrame({ isScanning, repeat, setIsScanning, onScanCom
     const connectToSocket = (guestId: string): Promise<{ kbs_socket_info: string, status_on_kbs: string }> => {
         return new Promise((resolve, reject) => {
             // Show modal when starting socket connection
-            setShowSocketModal(true);
+            showSocketModal.current=true;
             setSocketInfo('');
             setSocketStatus('connecting');
 
@@ -282,9 +287,9 @@ export default function ScanFrame({ isScanning, repeat, setIsScanning, onScanCom
                     newSocket.disconnect();
                     // Don't close modal automatically for failed status - let user close it
                     resolve({ kbs_socket_info, status_on_kbs });
-                } else if (status_on_kbs === 'checkedIn') {
+                } else if (status_on_kbs === 'checkedin') {
                     newSocket.disconnect();
-                    setShowSocketModal(false); // Only auto-close for successful check-in
+                    // setShowSocketModal(false); // Only auto-close for successful check-in
                     resolve({ kbs_socket_info, status_on_kbs });
                 }
             });
@@ -303,9 +308,9 @@ export default function ScanFrame({ isScanning, repeat, setIsScanning, onScanCom
                     newSocket.disconnect();
                     // Don't close modal automatically for failed status - let user close it
                     resolve({ kbs_socket_info, status_on_kbs });
-                } else if (status_on_kbs === 'checkedIn') {
+                } else if (status_on_kbs === 'checkedin') {
                     newSocket.disconnect();
-                    setShowSocketModal(false); // Only auto-close for successful check-in
+                    // setShowSocketModal(false); // Only auto-close for successful check-in
                     resolve({ kbs_socket_info, status_on_kbs });
                 }
             });
@@ -313,7 +318,7 @@ export default function ScanFrame({ isScanning, repeat, setIsScanning, onScanCom
             newSocket.on('error', (error) => {
                 console.error('Socket error:', error);
                 newSocket.disconnect();
-                setShowSocketModal(false); // Hide modal on error
+                // setShowSocketModal(false); // Hide modal on error
                 reject(new Error('Socket connection error'));
             });
 
@@ -355,7 +360,8 @@ export default function ScanFrame({ isScanning, repeat, setIsScanning, onScanCom
     };
 
     const onCloseModal = () => {
-        setShowSocketModal(false);
+        // setShowSocketModal(false);
+        showSocketModal.current=false
         // Reset socket info when closing modal
         setSocketInfo('');
         setSocketStatus('');
@@ -489,7 +495,7 @@ export default function ScanFrame({ isScanning, repeat, setIsScanning, onScanCom
                 </>
             )}
             <SocketLoadingModal
-                isOpen={showSocketModal}
+                isOpen={showSocketModal.current}
                 kbsSocketInfo={socketInfo}
                 status={socketStatus}
                 onClose={onCloseModal}

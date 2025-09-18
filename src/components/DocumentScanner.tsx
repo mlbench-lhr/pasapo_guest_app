@@ -63,6 +63,7 @@ export default function DocumentScanner() {
         }
 
         if (result.data.data.number_of_guests === 0) {
+          console.log("router pushing from document file")
           router.push("/checkedin");
         }
 
