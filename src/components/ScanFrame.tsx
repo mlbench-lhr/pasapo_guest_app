@@ -303,33 +303,33 @@ export default function ScanFrame({ isScanning, repeat, setIsScanning, onScanCom
         });
     };
 
-    const testWithImageFile = (): void => {
-        const input: HTMLInputElement = document.createElement('input');
-        input.type = 'file';
-        input.accept = 'image/*';
+    // const testWithImageFile = (): void => {
+    //     const input: HTMLInputElement = document.createElement('input');
+    //     input.type = 'file';
+    //     input.accept = 'image/*';
 
-        input.onchange = async (e: Event): Promise<void> => {
-            const target = e.target as HTMLInputElement;
-            const file: File | null = target.files?.[0] || null;
+    //     input.onchange = async (e: Event): Promise<void> => {
+    //         const target = e.target as HTMLInputElement;
+    //         const file: File | null = target.files?.[0] || null;
 
-            if (file) {
-                console.log('Testing with file:', file.name, file.size, 'bytes');
+    //         if (file) {
+    //             console.log('Testing with file:', file.name, file.size, 'bytes');
 
-                // Set some test values
-                setCurrentScanCount(0); // Reset for testing
+    //             // Set some test values
+    //             setCurrentScanCount(0); // Reset for testing
 
-                try {
-                    await processPassportImage(file as Blob); // file is already a Blob
-                    console.log('Test completed successfully!');
-                } catch (error: unknown) {
-                    const errorMessage = error instanceof Error ? error.message : String(error);
-                    console.error('Test failed:', errorMessage);
-                }
-            }
-        };
+    //             try {
+    //                 await processPassportImage(file as Blob); // file is already a Blob
+    //                 console.log('Test completed successfully!');
+    //             } catch (error: unknown) {
+    //                 const errorMessage = error instanceof Error ? error.message : String(error);
+    //                 console.error('Test failed:', errorMessage);
+    //             }
+    //         }
+    //     };
 
-        input.click();
-    };
+    //     input.click();
+    // };
 
     const onCloseModal = () => {
         // setShowSocketModal(false);
@@ -486,14 +486,14 @@ export default function ScanFrame({ isScanning, repeat, setIsScanning, onScanCom
                             alt="Logo"
                         />
                     </button>
-                    <button
+                   {/* <button
                         onClick={testWithImageFile}
                         className="fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded z-50"
                         type="button"
                     >
                         Test Image Upload
                     </button>
-                </>
+                */}</>
             )}
             <SocketLoadingModal
                 isOpen={showSocketModal.current}
