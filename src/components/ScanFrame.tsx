@@ -235,7 +235,7 @@ export default function ScanFrame({ isScanning, repeat, setIsScanning, onScanCom
             setSocketInfo('');
             setSocketStatus('connecting');
 
-            const newSocket = io('https://213.159.6.36:10000', {
+            const newSocket = io('https://ws.pasistan.com', {
                 transports: ["websocket"],
             });
 
