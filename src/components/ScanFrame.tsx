@@ -17,6 +17,21 @@ type Country = {
     country_code: string;
 };
 
+interface PassportData {
+    first_name?: string;
+    last_name?: string;
+    dateOfBirth?: string;
+    country?: string;
+    passportNumber?: string;
+    gender?: string;
+    documentType?: string;
+    guest_add_type?: "scan";
+    force_unarchive?: boolean;
+    tckNumber?: string;
+}
+
+
+
 
 
 export default function ScanFrame({ isScanning, repeat, setIsScanning, onScanComplete }: ScanFrameProps) {
@@ -32,8 +47,8 @@ export default function ScanFrame({ isScanning, repeat, setIsScanning, onScanCom
     const showSocketModal = useRef<boolean>(false);
     const [socketInfo, setSocketInfo] = useState<string>('');
     const [socketStatus, setSocketStatus] = useState<string>('');
-    const [passportData, setPassportData] = useState<any>(null);
-    const [editedPassportData, setEditedPassportData] = useState<any>(null);
+    const [passportData, setPassportData] = useState<PassportData | null>();
+    const [editedPassportData, setEditedPassportData] = useState<PassportData | null>();
     const [countries, setCountries] = useState<Country[]>([]);
     const searchParams = useSearchParams();
 
@@ -307,37 +322,40 @@ export default function ScanFrame({ isScanning, repeat, setIsScanning, onScanCom
         });
     };
 
-    const testWithImageFile = (): void => {
-        const input: HTMLInputElement = document.createElement('input');
-        input.type = 'file';
-        input.accept = 'image/*';
+    // const testWithImageFile = (): void => {
+    //     const input: HTMLInputElement = document.createElement('input');
+    //     input.type = 'file';
+    //     input.accept = 'image/*';
 
-        input.onchange = async (e: Event): Promise<void> => {
-            const target = e.target as HTMLInputElement;
-            const file: File | null = target.files?.[0] || null;
+    //     input.onchange = async (e: Event): Promise<void> => {
+    //         const target = e.target as HTMLInputElement;
+    //         const file: File | null = target.files?.[0] || null;
 
-            if (file) {
-                console.log('Testing with file:', file.name, file.size, 'bytes');
-                setCurrentScanCount(0);
+    //         if (file) {
+    //             console.log('Testing with file:', file.name, file.size, 'bytes');
+    //             setCurrentScanCount(0);
 
-                try {
-                    await processPassportImage(file as Blob);
-                    console.log('Test completed successfully!');
-                } catch (error: unknown) {
-                    const errorMessage = error instanceof Error ? error.message : String(error);
-                    console.error('Test failed:', errorMessage);
-                }
-            }
-        };
+    //             try {
+    //                 await processPassportImage(file as Blob);
+    //                 console.log('Test completed successfully!');
+    //             } catch (error: unknown) {
+    //                 const errorMessage = error instanceof Error ? error.message : String(error);
+    //                 console.error('Test failed:', errorMessage);
+    //             }
+    //         }
+    //     };
 
-        input.click();
-    };
+    //     input.click();
+    // };
 
-    const handleInputChange = (field: string, value: string) => {
-        setEditedPassportData((prev: any) => ({
-            ...prev,
-            [field]: value
-        }));
+    const handleInputChange = (field: keyof PassportData, value: string | boolean) => {
+        setEditedPassportData(prev => {
+            if (!prev) return { [field]: value } as PassportData;
+            return {
+                ...prev,
+                [field]: value,
+            };
+        });
     };
 
     const handleRescan = () => {
@@ -717,13 +735,13 @@ export default function ScanFrame({ isScanning, repeat, setIsScanning, onScanCom
                             alt="Logo"
                         />
                     </button>
-                    <button
+                    {/* <button
                         onClick={testWithImageFile}
                         className="fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded z-50"
                         type="button"
                     >
                         Test Image Upload
-                    </button>
+                    </button> */}
                 </>
             )}
 
