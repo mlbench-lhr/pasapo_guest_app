@@ -1,15 +1,23 @@
 'use client'
 import { useRef, useEffect, useState, use } from 'react';
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Image from 'next/image';
 import { io, Socket } from 'socket.io-client';
 import SocketLoadingModal from './modal';
+
 interface ScanFrameProps {
     isScanning: boolean;
     repeat: number;
     setIsScanning: (value: boolean) => void;
     onScanComplete: () => void;
 }
+
+type Country = {
+    country_name: string;
+    country_code: string;
+};
+
+
 
 export default function ScanFrame({ isScanning, repeat, setIsScanning, onScanComplete }: ScanFrameProps) {
     const videoRef = useRef<HTMLVideoElement>(null);
@@ -24,15 +32,22 @@ export default function ScanFrame({ isScanning, repeat, setIsScanning, onScanCom
     const showSocketModal = useRef<boolean>(false);
     const [socketInfo, setSocketInfo] = useState<string>('');
     const [socketStatus, setSocketStatus] = useState<string>('');
+    const [passportData, setPassportData] = useState<any>(null);
+    const [editedPassportData, setEditedPassportData] = useState<any>(null);
+    const [countries, setCountries] = useState<Country[]>([]);
+    const searchParams = useSearchParams();
+
 
     useEffect(() => {
-        console.log("modal", showSocketModal)
-    }, [showSocketModal])
+        if (passportData) {
+            setEditedPassportData(passportData);
+        }
+    }, [passportData]);
+
 
     useEffect(() => {
         if (isScanning) {
             startCamera();
-            // Reset scan count when starting new scanning session
             setCurrentScanCount(0);
         } else {
             stopCamera();
@@ -40,7 +55,6 @@ export default function ScanFrame({ isScanning, repeat, setIsScanning, onScanCom
 
         return () => {
             stopCamera();
-            // Clean up socket connection
             if (socket) {
                 socket.disconnect();
             }
@@ -49,18 +63,14 @@ export default function ScanFrame({ isScanning, repeat, setIsScanning, onScanCom
 
     const startCamera = async (): Promise<void> => {
         try {
-            // Check if camera is available
             if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
                 throw new Error('Camera not supported');
             }
 
-            // First check camera permissions
             const permissions = await navigator.permissions.query({ name: 'camera' as PermissionName });
             console.log('Camera permission state:', permissions.state);
 
-            // For mobile browsers, try multiple camera configurations
             const constraints = [
-                // Try environment camera first (back camera)
                 {
                     video: {
                         facingMode: { exact: 'environment' },
@@ -68,7 +78,6 @@ export default function ScanFrame({ isScanning, repeat, setIsScanning, onScanCom
                         height: { min: 480, ideal: 720, max: 1080 }
                     }
                 },
-                // Fallback to any environment camera
                 {
                     video: {
                         facingMode: 'environment',
@@ -76,7 +85,6 @@ export default function ScanFrame({ isScanning, repeat, setIsScanning, onScanCom
                         height: { min: 480, ideal: 720 }
                     }
                 },
-                // Fallback to any camera
                 {
                     video: {
                         width: { min: 640, ideal: 1280 },
@@ -88,7 +96,6 @@ export default function ScanFrame({ isScanning, repeat, setIsScanning, onScanCom
             let mediaStream: MediaStream | null = null;
             let lastError: Error | null = null;
 
-            // Try each constraint configuration
             for (const constraint of constraints) {
                 try {
                     console.log('Trying camera constraint:', constraint);
@@ -110,8 +117,6 @@ export default function ScanFrame({ isScanning, repeat, setIsScanning, onScanCom
 
             if (videoRef.current) {
                 videoRef.current.srcObject = mediaStream;
-
-                // Ensure video plays on mobile
                 videoRef.current.setAttribute('playsinline', 'true');
                 videoRef.current.setAttribute('webkit-playsinline', 'true');
 
@@ -139,7 +144,6 @@ export default function ScanFrame({ isScanning, repeat, setIsScanning, onScanCom
                 }
             }
         }
-
     };
 
     const stopCamera = (): void => {
@@ -160,14 +164,11 @@ export default function ScanFrame({ isScanning, repeat, setIsScanning, onScanCom
 
         if (!ctx) return;
 
-        // Set canvas size to match video
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
 
-        // Draw current video frame to canvas
         ctx.drawImage(video, 0, 0);
 
-        // Convert to blob and process
         canvas.toBlob((blob) => {
             if (blob) {
                 processPassportImage(blob);
@@ -193,25 +194,10 @@ export default function ScanFrame({ isScanning, repeat, setIsScanning, onScanCom
                 console.error("Server Error:", result.data.message);
                 throw new Error(result.data.message)
             }
-            console.log(result.data.data.guestInfo)
+            console.log(result.data.data)
 
-            // Extract guest ID from response
-            const guestId = result.data.data?.guestInfo?.id;
-
-            if (!guestId) {
-                throw new Error("No guest ID found in response");
-            }
-
-            console.log("Guest ID found:", guestId);
-
-            // Connect to socket and wait for status_on_kbs to be "failed"
-            console.log("Connecting to socket and waiting for status_on_kbs...");
-            const socketData = await connectToSocket(guestId);
-
-            console.log("Socket data received:", socketData);
-
-            // Successful scan - increment count
-
+            // Store passport data to display
+            setPassportData(result.data.data);
 
         } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
@@ -221,16 +207,42 @@ export default function ScanFrame({ isScanning, repeat, setIsScanning, onScanCom
             if (error instanceof Error && error.message === "MRZ not found or invalid") {
                 console.log(`Scan ${currentScanCount + 1} failed: ${error.message}`);
                 setIsProcessing(false);
-                // Continue scanning without incrementing count
-                // Camera stays active for retry
             }
             setIsProcessing(false);
         }
     };
 
+    const getCountries = async () => {
+        try {
+            const session_id = searchParams.get('session_id');
+            const api_key = searchParams.get('api_key');
+            const response = await fetch("/api/get-countries", {
+                method: "POST",
+                body: JSON.stringify({ api_key, session_id }),
+            });
+            console.log("getting countries after api")
+
+
+            const result = await response.json();
+
+            if (!response.ok) {
+                if (result.error === "Link Expired") {
+                    router.push("/linkExpiredPage");
+                }
+                throw new Error(result.data.data.message || 'Unexpected error');
+            }
+            setCountries(result.data.data)
+
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            console.error("Network Error:", message);
+        }
+    };
+    useEffect(() => {
+        getCountries();
+    }, []);
     const connectToSocket = (guestId: string): Promise<{ kbs_socket_info: string, status_on_kbs: string }> => {
         return new Promise((resolve, reject) => {
-            // Show modal when starting socket connection
             showSocketModal.current = true;
             setSocketInfo('');
             setSocketStatus('connecting');
@@ -251,17 +263,14 @@ export default function ScanFrame({ isScanning, repeat, setIsScanning, onScanCom
 
                 console.log('Received guest data:', { kbs_socket_info, status_on_kbs });
 
-                // Update modal with socket info
                 setSocketInfo(kbs_socket_info);
                 setSocketStatus(status_on_kbs);
 
                 if (status_on_kbs === 'failed') {
                     newSocket.disconnect();
-                    // Don't close modal automatically for failed status - let user close it
                     resolve({ kbs_socket_info, status_on_kbs });
                 } else if (status_on_kbs === 'checkedin') {
                     newSocket.disconnect();
-                    // setShowSocketModal(false); // Only auto-close for successful check-in
                     resolve({ kbs_socket_info, status_on_kbs });
                 }
             });
@@ -272,17 +281,14 @@ export default function ScanFrame({ isScanning, repeat, setIsScanning, onScanCom
 
                 console.log('Guest updated:', { kbs_socket_info, status_on_kbs });
 
-                // Update modal with socket info
                 setSocketInfo(kbs_socket_info);
                 setSocketStatus(status_on_kbs);
 
                 if (status_on_kbs === 'failed') {
                     newSocket.disconnect();
-                    // Don't close modal automatically for failed status - let user close it
                     resolve({ kbs_socket_info, status_on_kbs });
                 } else if (status_on_kbs === 'checkedin') {
                     newSocket.disconnect();
-                    // setShowSocketModal(false); // Only auto-close for successful check-in
                     resolve({ kbs_socket_info, status_on_kbs });
                 }
             });
@@ -290,63 +296,116 @@ export default function ScanFrame({ isScanning, repeat, setIsScanning, onScanCom
             newSocket.on('error', (error) => {
                 console.error('Socket error:', error);
                 newSocket.disconnect();
-                // setShowSocketModal(false); // Hide modal on error
                 reject(new Error('Socket connection error'));
             });
 
             newSocket.on('disconnect', () => {
                 console.log('Socket disconnected');
-                // setShowSocketModal(false); // Hide modal on disconnect
             });
 
             setSocket(newSocket);
         });
     };
 
-    // const testWithImageFile = (): void => {
-    //     const input: HTMLInputElement = document.createElement('input');
-    //     input.type = 'file';
-    //     input.accept = 'image/*';
+    const testWithImageFile = (): void => {
+        const input: HTMLInputElement = document.createElement('input');
+        input.type = 'file';
+        input.accept = 'image/*';
 
-    //     input.onchange = async (e: Event): Promise<void> => {
-    //         const target = e.target as HTMLInputElement;
-    //         const file: File | null = target.files?.[0] || null;
+        input.onchange = async (e: Event): Promise<void> => {
+            const target = e.target as HTMLInputElement;
+            const file: File | null = target.files?.[0] || null;
 
-    //         if (file) {
-    //             console.log('Testing with file:', file.name, file.size, 'bytes');
+            if (file) {
+                console.log('Testing with file:', file.name, file.size, 'bytes');
+                setCurrentScanCount(0);
 
-    //             // Set some test values
-    //             setCurrentScanCount(0); // Reset for testing
+                try {
+                    await processPassportImage(file as Blob);
+                    console.log('Test completed successfully!');
+                } catch (error: unknown) {
+                    const errorMessage = error instanceof Error ? error.message : String(error);
+                    console.error('Test failed:', errorMessage);
+                }
+            }
+        };
 
-    //             try {
-    //                 await processPassportImage(file as Blob); // file is already a Blob
-    //                 console.log('Test completed successfully!');
-    //             } catch (error: unknown) {
-    //                 const errorMessage = error instanceof Error ? error.message : String(error);
-    //                 console.error('Test failed:', errorMessage);
-    //             }
-    //         }
-    //     };
+        input.click();
+    };
 
-    //     input.click();
-    // };
+    const handleInputChange = (field: string, value: string) => {
+        setEditedPassportData((prev: any) => ({
+            ...prev,
+            [field]: value
+        }));
+    };
+
+    const handleRescan = () => {
+        setPassportData(null);
+        setEditedPassportData(null);
+        setErrorMessage(null);
+        setIsProcessing(false);
+        // Camera stays active for rescan
+    };
+
+    const handleContinue = async () => {
+        // Use editedPassportData for further processing
+        console.log('Continuing with data:', editedPassportData);
+        try {
+            const session_id = searchParams.get('session_id');
+            const api_key = searchParams.get('api_key');
+            const data = {
+                "link_id": session_id,
+                "first_name": editedPassportData?.first_name,
+                "last_name": editedPassportData?.last_name,
+                "date_of_birth": editedPassportData?.dateOfBirth,
+                "issuing_country": editedPassportData?.country,
+                "document_number": editedPassportData?.passportNumber,
+                "sex": editedPassportData?.gender,
+                "document_type": editedPassportData?.documentType,
+                "guest_add_type": "scan",
+                "force_unarchive": true,
+                "tck_number": editedPassportData?.tckNumber
+
+            }
+            console.log(editedPassportData)
+            const response = await fetch("/api/add_guest", {
+                method: "POST",
+                body: JSON.stringify({ api_key, data }),
+            });
+
+
+            const result = await response.json();
+
+            if (!response.ok) {
+                if (result.error === "Link Expired") {
+                    router.push("/linkExpiredPage");
+                }
+                throw new Error(result.data.data.message || 'Unexpected error');
+            }
+
+        }
+        catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            console.error('Error:', errorMessage);
+        }
+        // Add your continue logic here
+        setPassportData(null);
+        setEditedPassportData(null);
+        setErrorMessage(null);
+        setIsProcessing(false);
+    };
 
     const onCloseModal = () => {
-        // setShowSocketModal(false);
         showSocketModal.current = false
-        // Reset socket info when closing modal
         setSocketInfo('');
         setSocketStatus('');
         const newScanCount = currentScanCount + 1;
         console.log(`Scan ${newScanCount} of ${repeat} completed`);
 
-        // Check if we've completed all required scans
         if (newScanCount >= repeat) {
-            // All scans completed
             setIsProcessing(false);
             setIsScanning(false);
-
-            // Call onScanComplete
             onScanComplete();
             console.log(showSocketModal)
 
@@ -354,17 +413,12 @@ export default function ScanFrame({ isScanning, repeat, setIsScanning, onScanCom
                 router.push("/checkedin");
             }
         } else {
-            // More scans needed - continue scanning
             setIsProcessing(false);
-            // Keep camera running for next scan
             console.log(`Preparing for scan ${newScanCount + 1} of ${repeat}`);
 
-            // Optional: Add a brief delay between scans
             setTimeout(() => {
-                // Ready for next scan
             }, 1000);
             setCurrentScanCount(newScanCount);
-
         }
     };
 
@@ -401,14 +455,12 @@ export default function ScanFrame({ isScanning, repeat, setIsScanning, onScanCom
 
     return (
         <>
-            {/* Main Scanner UI */}
             <div className="flex flex-col items-center">
                 <p className="text-gray-400 text-center mb-4 text-lg leading-relaxed">
                     Move passport inside the<br />
                     blue square
                 </p>
 
-                {/* Scan Progress Indicator */}
                 {repeat > 0 && (
                     <div className="mb-4 text-center">
                         <p className="text-sm text-gray-500">
@@ -424,9 +476,7 @@ export default function ScanFrame({ isScanning, repeat, setIsScanning, onScanCom
                 )}
 
                 <div className="relative">
-                    {/* Scan Frame */}
                     <div className="w-80 h-60 border-2 border-blue-500 rounded-lg bg-transparent relative overflow-hidden">
-                        {/* Camera Video */}
                         {isScanning && (
                             <video
                                 ref={videoRef}
@@ -438,42 +488,223 @@ export default function ScanFrame({ isScanning, repeat, setIsScanning, onScanCom
                             />
                         )}
 
-                        {/* Corner Brackets */}
-                        <div className="absolute top-2 left-2 w-6 h-6 border-l-2 border-t-2 border-blue-500 z-10"></div>
-                        <div className="absolute top-2 right-2 w-6 h-6 border-r-2 border-t-2 border-blue-500 z-10"></div>
-                        <div className="absolute bottom-2 left-2 w-6 h-6 border-l-2 border-b-2 border-blue-500 z-10"></div>
-                        <div className="absolute bottom-2 right-2 w-6 h-6 border-r-2 border-b-2 border-blue-500 z-10"></div>
+                        {/* Corner brackets with glow */}
+                        <div className="absolute top-2 left-2 w-6 h-6 border-l-2 border-t-2 border-blue-500 z-10 shadow-lg shadow-blue-500/50"></div>
+                        <div className="absolute top-2 right-2 w-6 h-6 border-r-2 border-t-2 border-blue-500 z-10 shadow-lg shadow-blue-500/50"></div>
+                        <div className="absolute bottom-2 left-2 w-6 h-6 border-l-2 border-b-2 border-blue-500 z-10 shadow-lg shadow-blue-500/50"></div>
+                        <div className="absolute bottom-2 right-2 w-6 h-6 border-r-2 border-b-2 border-blue-500 z-10 shadow-lg shadow-blue-500/50"></div>
 
-                        {/* Processing Overlay */}
                         {isProcessing && (
                             <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center z-20">
                                 <div className="text-white text-center">
-                                    <div className="animate-spin w-8 h-8 border-2 border-white border-t-transparent rounded-full mx-auto mb-2"></div>
-                                    <p>Processing scan {currentScanCount + 1}...</p>
+                                    <div className="relative w-12 h-12 mx-auto mb-2">
+                                        <div className="absolute inset-0 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                                        <div className="absolute inset-2 border-4 border-blue-300 border-b-transparent rounded-full animate-spin" style={{ animationDirection: 'reverse', animationDuration: '0.8s' }}></div>
+                                    </div>
+                                    <p className="text-sm font-medium">Processing scan {currentScanCount + 1}...</p>
                                 </div>
                             </div>
                         )}
 
-                        {/* Scanning Animation */}
+                        {/* Enhanced scanning animation */}
                         {isScanning && !isProcessing && (
-                            <div className="absolute inset-0 bg-blue-500 bg-opacity-10 animate-pulse z-10"></div>
+                            <>
+                                {/* Vertical sweep line - goes up and down */}
+                                <div
+                                    className="absolute top-0 left-0 w-full h-0.5 bg-gradient-to-r from-transparent via-blue-400 to-transparent z-10"
+                                    style={{
+                                        animation: 'scanVertical 3s ease-in-out infinite',
+                                        boxShadow: '0 0 10px 2px rgba(59, 130, 246, 0.5)'
+                                    }}
+                                ></div>
+
+                                {/* Horizontal sweep line - goes left and right */}
+                                <div
+                                    className="absolute top-0 left-0 w-0.5 h-full bg-gradient-to-b from-transparent via-blue-400 to-transparent z-10"
+                                    style={{
+                                        animation: 'scanHorizontal 3s ease-in-out infinite',
+                                        animationDelay: '1.5s',
+                                        boxShadow: '0 0 10px 2px rgba(59, 130, 246, 0.5)'
+                                    }}
+                                ></div>
+
+                                {/* Pulsing overlay */}
+                                <div className="absolute inset-0 bg-blue-500 bg-opacity-5 z-10" style={{ animation: 'pulse 3s ease-in-out infinite' }}></div>
+
+                                {/* Grid pattern overlay */}
+                                <div
+                                    className="absolute inset-0 z-10 opacity-20"
+                                    style={{
+                                        backgroundImage: 'linear-gradient(0deg, transparent 24%, rgba(59, 130, 246, .3) 25%, rgba(59, 130, 246, .3) 26%, transparent 27%, transparent 74%, rgba(59, 130, 246, .3) 75%, rgba(59, 130, 246, .3) 76%, transparent 77%, transparent), linear-gradient(90deg, transparent 24%, rgba(59, 130, 246, .3) 25%, rgba(59, 130, 246, .3) 26%, transparent 27%, transparent 74%, rgba(59, 130, 246, .3) 75%, rgba(59, 130, 246, .3) 76%, transparent 77%, transparent)',
+                                        backgroundSize: '20px 20px'
+                                    }}
+                                ></div>
+                            </>
                         )}
                     </div>
-                </div>
-                {
-                    errorMessage && (
-                        <div className="mt-4 text-red-500 text-center">
-                            {errorMessage}
-                        </div>
-                    )
-                }
 
-                {/* Hidden canvas for image processing */}
+                    <style jsx>{`
+        @keyframes scanVertical {
+            0% { transform: translateY(0); opacity: 0; }
+            10% { opacity: 1; }
+            40% { opacity: 1; }
+            50% { transform: translateY(240px); opacity: 0; }
+            60% { opacity: 1; }
+            90% { opacity: 1; }
+            100% { transform: translateY(0); opacity: 0; }
+        }
+        
+        @keyframes scanHorizontal {
+            0% { transform: translateX(0); opacity: 0; }
+            10% { opacity: 1; }
+            40% { opacity: 1; }
+            50% { transform: translateX(320px); opacity: 0; }
+            60% { opacity: 1; }
+            90% { opacity: 1; }
+            100% { transform: translateX(0); opacity: 0; }
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 0.05; }
+            50% { opacity: 0.15; }
+        }
+    `}</style>
+                </div>
+
+                {errorMessage && (
+                    <div className="mt-4 text-red-500 text-center">
+                        {errorMessage}
+                    </div>
+                )}
+
+                {passportData && (
+                    <div className="mt-6 w-80 bg-gray-800 rounded-lg p-4 text-sm">
+                        <h3 className="text-white font-semibold mb-3 text-center border-b border-gray-700 pb-2">
+                            Extracted Information
+                        </h3>
+                        <div className="space-y-3 text-gray-300">
+                            <div className="flex flex-col">
+                                <label className="text-gray-400 text-xs mb-1">First Name:</label>
+                                <input
+                                    type="text"
+                                    value={editedPassportData?.first_name || ''}
+                                    onChange={(e) => handleInputChange('first_name', e.target.value)}
+                                    className="bg-gray-700 text-white px-3 py-2 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                />
+                            </div>
+                            <div className="flex flex-col">
+                                <label className="text-gray-400 text-xs mb-1">Last Name:</label>
+                                <input
+                                    type="text"
+                                    value={editedPassportData?.last_name || ''}
+                                    onChange={(e) => handleInputChange('last_name', e.target.value)}
+                                    className="bg-gray-700 text-white px-3 py-2 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                />
+                            </div>
+                            <div className="flex flex-col">
+                                <label className="text-gray-400 text-xs mb-1">Passport Number:</label>
+                                <input
+                                    type="text"
+                                    value={editedPassportData?.passportNumber?.replace(/</g, '') || ''}
+                                    onChange={(e) => handleInputChange('passportNumber', e.target.value)}
+                                    className="bg-gray-700 text-white px-3 py-2 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                />
+                            </div>
+                            <div className="flex flex-col">
+                                <label className="text-gray-400 text-xs mb-1">Gender:</label>
+                                <div className="relative">
+                                    <select
+                                        value={editedPassportData?.gender || 'M'}
+                                        onChange={(e) => handleInputChange('gender', e.target.value)}
+                                        className="appearance-none bg-gray-700 text-white px-3 py-2 pr-10 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 w-full"
+                                    >
+                                        <option value="M">Male</option>
+                                        <option value="F">Female</option>
+                                    </select>
+                                    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-gray-400">
+                                        <svg className="fill-current h-4 w-4" viewBox="0 0 20 20">
+                                            <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" />
+                                        </svg>
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="flex flex-col">
+                                <label className="text-gray-400 text-xs mb-1">Date of Birth:</label>
+                                <input
+                                    type="text"
+                                    value={editedPassportData?.dateOfBirth || ''}
+                                    onChange={(e) => handleInputChange('dateOfBirth', e.target.value)}
+                                    placeholder="DD-MM-YYYY"
+                                    className="bg-gray-700 text-white px-3 py-2 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                />
+                            </div>
+                            <div className="flex flex-col">
+                                <label className="text-gray-400 text-xs mb-1">Country:</label>
+                                <div className="relative">
+                                    <select
+                                        value={editedPassportData?.country || ''}
+                                        onChange={(e) => handleInputChange('country', e.target.value)}
+                                        className="bg-gray-700 text-white px-3 py-2 pr-10 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none w-full"
+                                    >
+                                        <option value="">Select Country</option>
+                                        {countries.map((country, index) => (
+                                            <option key={index} value={country.country_name}>
+                                                {country.country_name}
+                                            </option>
+                                        ))}
+                                    </select>
+                                    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-gray-400">
+                                        <svg className="fill-current h-4 w-4" viewBox="0 0 20 20">
+                                            <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" />
+                                        </svg>
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="flex flex-col">
+                                <label className="text-gray-400 text-xs mb-1">Document Type:</label>
+                                <input
+                                    type="text"
+                                    value={editedPassportData?.documentType || ''}
+                                    onChange={(e) => handleInputChange('documentType', e.target.value)}
+                                    className="bg-gray-700 text-white px-3 py-2 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                />
+                            </div>
+
+                            {editedPassportData?.tckNumber !== null && (
+                                <div className="flex flex-col">
+                                    <label className="text-gray-400 text-xs mb-1">TCK Number:</label>
+                                    <input
+                                        type="text"
+                                        value={editedPassportData?.tckNumber || ''}
+                                        onChange={(e) => handleInputChange('tckNumber', e.target.value)}
+                                        className="bg-gray-700 text-white px-3 py-2 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    />
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Action Buttons */}
+                        <div className="flex gap-3 mt-4">
+                            <button
+                                onClick={handleRescan}
+                                className="flex-1 bg-gray-600 hover:bg-gray-700 text-white py-2 px-4 rounded font-medium transition-colors"
+                            >
+                                Rescan
+                            </button>
+                            <button
+                                onClick={handleContinue}
+                                className="flex-1 bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded font-medium transition-colors"
+                            >
+                                Continue
+                            </button>
+                        </div>
+                    </div>
+                )}
+
                 <canvas ref={canvasRef} className="hidden" />
             </div>
 
-            {/* Fixed Bottom Capture Button */}
-            {isScanning && !isProcessing && (
+            {isScanning && !isProcessing && !passportData && (
                 <>
                     <button
                         onClick={captureImage}
@@ -486,22 +717,22 @@ export default function ScanFrame({ isScanning, repeat, setIsScanning, onScanCom
                             alt="Logo"
                         />
                     </button>
-                   {/* <button
+                    <button
                         onClick={testWithImageFile}
                         className="fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded z-50"
                         type="button"
                     >
                         Test Image Upload
                     </button>
-                */}</>
+                </>
             )}
+
             <SocketLoadingModal
                 isOpen={showSocketModal.current}
                 kbsSocketInfo={socketInfo}
                 status={socketStatus}
                 onClose={onCloseModal}
             />
-
         </>
     );
 }

@@ -62,10 +62,10 @@ export default function DocumentScanner() {
           router.push("/linkExpiredPage");
         }
 
-        if (result.data.data.number_of_guests === 0) {
-          console.log("router pushing from document file")
-          router.push("/checkedin");
-        }
+        // if (result.data.data.number_of_guests === 0) {
+        //   console.log("router pushing from document file")
+        //   router.push("/checkedin");
+        // }
 
         setRepeat(result.data.data.number_of_guests)
       } catch (error) {
@@ -78,13 +78,13 @@ export default function DocumentScanner() {
   }, [searchParams, router]);
 
 
-  if (hasMissingParams) {
-    return (
-      <div style={{ textAlign: 'center', marginTop: '20%' }}>
-        ❌ There are no search params
-      </div>
-    );
-  }
+  // if (hasMissingParams) {
+  //   return (
+  //     <div style={{ textAlign: 'center', marginTop: '20%' }}>
+  //       ❌ There are no search params
+  //     </div>
+  //   );
+  // }
 
   return (
     <div className="min-h-screen bg-gray-900 text-white relative">
