@@ -383,8 +383,6 @@ export default function ScanFrame({ isScanning, repeat, setIsScanning, onScanCom
     };
 
     const handleContinue = async () => {
-        console.log('Continuing with data:', editedPassportData);
-
         setIsAddingGuest(true); // Show loading
 
         try {
@@ -404,28 +402,35 @@ export default function ScanFrame({ isScanning, repeat, setIsScanning, onScanCom
                 "tck_number": editedPassportData?.tckNumber
             }
 
-            console.log(editedPassportData);
-
             const response = await fetch("/api/add_guest", {
                 method: "POST",
                 body: JSON.stringify({ api_key, data }),
             });
-            console.log("response",response);
 
             const result = await response.json();
-            console.log("result",result);
             if (!response.ok || result.status === false) {
                 throw new Error(result.error || 'Unexpected error');
             }
 
             // Success
-            await Swal.fire({
+            const Alertresult = await Swal.fire({
                 icon: 'success',
                 title: 'Success!',
                 text: 'Guest added successfully',
+                showCancelButton: true,
+                confirmButtonText: 'Continue Scanning',
+                cancelButtonText: 'Finish',
                 confirmButtonColor: '#3B82F6',
-                confirmButtonText: 'OK'
+                cancelButtonColor: '#EF4444'
             });
+
+            if (Alertresult.isConfirmed) {
+                handleRescan();
+            }
+            else {
+                router.push("/checkedin");
+            }
+
 
             // Clear states after success
             setPassportData(null);
