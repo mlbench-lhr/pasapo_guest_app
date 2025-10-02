@@ -4,6 +4,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Image from 'next/image';
 import { io, Socket } from 'socket.io-client';
 import SocketLoadingModal from './modal';
+import Swal from 'sweetalert2';
 
 interface ScanFrameProps {
     isScanning: boolean;
@@ -51,6 +52,8 @@ export default function ScanFrame({ isScanning, repeat, setIsScanning, onScanCom
     const [editedPassportData, setEditedPassportData] = useState<PassportData | null>();
     const [countries, setCountries] = useState<Country[]>([]);
     const searchParams = useSearchParams();
+    const [capturedImage, setCapturedImage] = useState<string>();
+    const [isAddingGuest, setIsAddingGuest] = useState<boolean>(false);
 
 
     useEffect(() => {
@@ -184,12 +187,17 @@ export default function ScanFrame({ isScanning, repeat, setIsScanning, onScanCom
 
         ctx.drawImage(video, 0, 0);
 
+        // Store the captured image as base64
+        const imageDataUrl = canvas.toDataURL('image/jpeg', 0.8);
+        setCapturedImage(imageDataUrl);
+
         canvas.toBlob((blob) => {
             if (blob) {
                 processPassportImage(blob);
             }
         }, 'image/jpeg', 0.8);
     };
+
 
     const processPassportImage = async (imageBlob: Blob): Promise<void> => {
         const link_id = sessionStorage.getItem("link_id")
@@ -363,12 +371,22 @@ export default function ScanFrame({ isScanning, repeat, setIsScanning, onScanCom
         setEditedPassportData(null);
         setErrorMessage(null);
         setIsProcessing(false);
-        // Camera stays active for rescan
+        setCapturedImage("");
+
+        // Restart the video element
+        if (videoRef.current && stream) {
+            videoRef.current.srcObject = stream;
+            videoRef.current.play().catch(error => {
+                console.log('Error restarting video:', error);
+            });
+        }
     };
 
     const handleContinue = async () => {
-        // Use editedPassportData for further processing
         console.log('Continuing with data:', editedPassportData);
+
+        setIsAddingGuest(true); // Show loading
+
         try {
             const session_id = searchParams.get('session_id');
             const api_key = searchParams.get('api_key');
@@ -384,34 +402,53 @@ export default function ScanFrame({ isScanning, repeat, setIsScanning, onScanCom
                 "guest_add_type": "scan",
                 "force_unarchive": true,
                 "tck_number": editedPassportData?.tckNumber
-
             }
-            console.log(editedPassportData)
+
+            console.log(editedPassportData);
+
             const response = await fetch("/api/add_guest", {
                 method: "POST",
                 body: JSON.stringify({ api_key, data }),
             });
-
+            console.log("response",response);
 
             const result = await response.json();
-
-            if (!response.ok) {
-                if (result.error === "Link Expired") {
-                    router.push("/linkExpiredPage");
-                }
-                throw new Error(result.data.data.message || 'Unexpected error');
+            console.log("result",result);
+            if (!response.ok || result.status === false) {
+                throw new Error(result.error || 'Unexpected error');
             }
 
-        }
-        catch (error) {
+            // Success
+            await Swal.fire({
+                icon: 'success',
+                title: 'Success!',
+                text: 'Guest added successfully',
+                confirmButtonColor: '#3B82F6',
+                confirmButtonText: 'OK'
+            });
+
+            // Clear states after success
+            setPassportData(null);
+            setEditedPassportData(null);
+            setErrorMessage(null);
+            setIsProcessing(false);
+            setCapturedImage("");
+
+        } catch (error) {
             const errorMessage = error instanceof Error ? error.message : String(error);
             console.error('Error:', errorMessage);
+
+            // Show error alert
+            await Swal.fire({
+                icon: 'error',
+                title: 'Error',
+                text: errorMessage || 'Failed to add guest',
+                confirmButtonColor: '#EF4444',
+                confirmButtonText: 'OK'
+            });
+        } finally {
+            setIsAddingGuest(false); // Hide loading
         }
-        // Add your continue logic here
-        setPassportData(null);
-        setEditedPassportData(null);
-        setErrorMessage(null);
-        setIsProcessing(false);
     };
 
     const onCloseModal = () => {
@@ -495,6 +532,7 @@ export default function ScanFrame({ isScanning, repeat, setIsScanning, onScanCom
 
                 <div className="relative">
                     <div className="w-80 h-60 border-2 border-blue-500 rounded-lg bg-transparent relative overflow-hidden">
+                        {/* Always render video, control visibility with CSS */}
                         {isScanning && (
                             <video
                                 ref={videoRef}
@@ -502,18 +540,22 @@ export default function ScanFrame({ isScanning, repeat, setIsScanning, onScanCom
                                 playsInline
                                 muted
                                 webkit-playsinline="true"
-                                className="w-full h-full object-cover"
+                                className={`w-full h-full object-cover ${capturedImage ? 'hidden' : 'block'}`}
                             />
                         )}
 
-                        {/* Corner brackets with glow */}
-                        <div className="absolute top-2 left-2 w-6 h-6 border-l-2 border-t-2 border-blue-500 z-10 shadow-lg shadow-blue-500/50"></div>
-                        <div className="absolute top-2 right-2 w-6 h-6 border-r-2 border-t-2 border-blue-500 z-10 shadow-lg shadow-blue-500/50"></div>
-                        <div className="absolute bottom-2 left-2 w-6 h-6 border-l-2 border-b-2 border-blue-500 z-10 shadow-lg shadow-blue-500/50"></div>
-                        <div className="absolute bottom-2 right-2 w-6 h-6 border-r-2 border-b-2 border-blue-500 z-10 shadow-lg shadow-blue-500/50"></div>
 
-                        {isProcessing && (
-                            <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center z-20">
+
+                        {/* Corner brackets with glow */}
+                        <div className="absolute top-2 left-2 w-6 h-6 border-l-2 border-t-2 border-blue-500 z-10  shadow-blue-500/50"></div>
+                        <div className="absolute top-2 right-2 w-6 h-6 border-r-2 border-t-2 border-blue-500 z-10  shadow-blue-500/50"></div>
+                        <div className="absolute bottom-2 left-2 w-6 h-6 border-l-2 border-b-2 border-blue-500 z-10  shadow-blue-500/50"></div>
+                        <div className="absolute bottom-2 right-2 w-6 h-6 border-r-2 border-b-2 border-blue-500 z-10  shadow-blue-500/50"></div>
+
+                        {/* Processing overlay - shows on top of captured image */}
+
+                        {isProcessing && !passportData ? (
+                            <div className="absolute inset-0 bg-black bg-opacity-60 flex items-center justify-center z-20">
                                 <div className="text-white text-center">
                                     <div className="relative w-12 h-12 mx-auto mb-2">
                                         <div className="absolute inset-0 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
@@ -522,12 +564,19 @@ export default function ScanFrame({ isScanning, repeat, setIsScanning, onScanCom
                                     <p className="text-sm font-medium">Processing scan {currentScanCount + 1}...</p>
                                 </div>
                             </div>
-                        )}
+                        ) : capturedImage ? (
+                            <img
+                                src={capturedImage}
+                                alt="Captured passport"
+                                className="absolute inset-0 w-full h-full object-cover z-5"
+                            />
+                        ) : (null)}
 
-                        {/* Enhanced scanning animation */}
-                        {isScanning && !isProcessing && (
+
+                        {/* Show scanning animations only when scanning and no captured image */}
+                        {isScanning && !capturedImage && (
                             <>
-                                {/* Vertical sweep line - goes up and down */}
+                                {/* Vertical sweep line */}
                                 <div
                                     className="absolute top-0 left-0 w-full h-0.5 bg-gradient-to-r from-transparent via-blue-400 to-transparent z-10"
                                     style={{
@@ -536,7 +585,7 @@ export default function ScanFrame({ isScanning, repeat, setIsScanning, onScanCom
                                     }}
                                 ></div>
 
-                                {/* Horizontal sweep line - goes left and right */}
+                                {/* Horizontal sweep line */}
                                 <div
                                     className="absolute top-0 left-0 w-0.5 h-full bg-gradient-to-b from-transparent via-blue-400 to-transparent z-10"
                                     style={{
@@ -560,6 +609,7 @@ export default function ScanFrame({ isScanning, repeat, setIsScanning, onScanCom
                             </>
                         )}
                     </div>
+
 
                     <style jsx>{`
         @keyframes scanVertical {
@@ -597,6 +647,7 @@ export default function ScanFrame({ isScanning, repeat, setIsScanning, onScanCom
 
                 {passportData && (
                     <div className="mt-6 w-80 bg-gray-800 rounded-lg p-4 text-sm">
+
                         <h3 className="text-white font-semibold mb-3 text-center border-b border-gray-700 pb-2">
                             Extracted Information
                         </h3>
@@ -711,9 +762,20 @@ export default function ScanFrame({ isScanning, repeat, setIsScanning, onScanCom
                             </button>
                             <button
                                 onClick={handleContinue}
-                                className="flex-1 bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded font-medium transition-colors"
+                                disabled={isAddingGuest}
+                                className="flex-1 bg-blue-500 hover:bg-blue-600 disabled:bg-gray-600 disabled:cursor-not-allowed text-white py-2 px-4 rounded font-medium transition-colors flex items-center justify-center"
                             >
-                                Continue
+                                {isAddingGuest ? (
+                                    <>
+                                        <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                        </svg>
+                                        Processing...
+                                    </>
+                                ) : (
+                                    'Continue'
+                                )}
                             </button>
                         </div>
                     </div>
@@ -724,26 +786,40 @@ export default function ScanFrame({ isScanning, repeat, setIsScanning, onScanCom
 
             {isScanning && !isProcessing && !passportData && (
                 <>
-                    <button
-                        onClick={captureImage}
-                        className="fixed bottom-8 left-1/2 transform -translate-x-1/2 bg-blue-500 hover:bg-blue-600 text-white p-3 rounded-full font-medium transition-colors z-50"
-                    >
-                        <Image
-                            width={63}
-                            height={20}
-                            src="/images/camera.svg"
-                            alt="Logo"
-                        />
-                    </button>
-                    {/* <button
-                        onClick={testWithImageFile}
-                        className="fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded z-50"
-                        type="button"
-                    >
-                        Test Image Upload
-                    </button> */}
+                    {!errorMessage ? (
+                        <>
+                            <button
+                                onClick={captureImage}
+                                className="fixed bottom-8 left-1/2 transform -translate-x-1/2 bg-blue-500 hover:bg-blue-600 text-white p-3 rounded-full font-medium transition-colors z-50"
+                            >
+                                <Image
+                                    width={63}
+                                    height={20}
+                                    src="/images/camera.svg"
+                                    alt="Logo"
+                                />
+                            </button>
+
+                            {/* <button
+                                onClick={testWithImageFile}
+                                className="fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded z-50"
+                                type="button"
+                            >
+                                Test Image Upload
+                            </button> */}
+
+                        </>
+                    ) : (
+                        <button
+                            onClick={handleRescan}
+                            className="fixed bottom-8 left-1/2 transform -translate-x-1/2 bg-blue-500 hover:bg-blue-600 text-white p-3 rounded-full font-medium transition-colors z-50 w-25 h-25 text-xl"
+                        >
+                            Rescan
+                        </button>
+                    )}
                 </>
             )}
+
 
             <SocketLoadingModal
                 isOpen={showSocketModal.current}

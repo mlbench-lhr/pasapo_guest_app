@@ -1,3 +1,4 @@
+import { stat } from "fs";
 import { NextRequest, NextResponse } from "next/server";
 
 export async function POST(req: NextRequest) {
@@ -24,9 +25,9 @@ export async function POST(req: NextRequest) {
         });
 
         const res = await backendRes.json();
-        console.log(res)
-        if (!backendRes.ok) {
-            return NextResponse.json({ error: res.message }, { status: backendRes.status });
+        console.log("res",res.status)
+        if (!backendRes.ok || res.status === false) {
+            return NextResponse.json({ error: res.message, status: res.status }, { status: backendRes.status });
         }
 
         return NextResponse.json({ res }, { status: 200 });
